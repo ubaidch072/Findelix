@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 from providers.socials import get_socials
 from providers.contacts import get_contacts
 from providers.executives import get_executives
-from providers.posts import get_recent_posts_and_summary
+from providers.posts import get_recent_posts, build_summary_from_posts
 from providers.serper import categorize_with_gemini_or_rules, normalize_domain
 
 def _now():
@@ -30,8 +30,9 @@ def build_profile(company: str, domain: str) -> Dict:
     # Fetch executives (names, titles, LinkedIn)
     execs = get_executives(company, domain, socials.get("website"))
 
-    # Fetch recent posts + summary
-    posts = get_recent_posts_and_summary(company, domain, socials.get("website"))
+    # Fetch recent posts (max 3 with placeholder) and build ML-based summary
+    posts_list = get_recent_posts(company, domain, socials.get("website"))
+    summary = build_summary_from_posts(posts_list, company, domain)
 
     # Categorize company
     category = categorize_with_gemini_or_rules(company, domain, socials)
@@ -43,8 +44,8 @@ def build_profile(company: str, domain: str) -> Dict:
         "socials": socials.get("links"),
         "contacts": contacts,
         "executives": execs,
-        "summary": posts.get("summary") or "",
-        "recent_posts": posts.get("posts"),
+        "summary": summary or "",
+        "recent_posts": posts_list,
         "category": category,
         "generated_at": _now(),
         "latency_ms": int((time.time() - start) * 1000)

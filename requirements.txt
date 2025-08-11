@@ -10,3 +10,6 @@ w3lib
 reportlab
 feedparser
 google-generativeai
+transformers
+torch
+sentencepiece
