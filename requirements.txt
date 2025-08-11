@@ -1,0 +1,12 @@
+flask
+gunicorn
+python-dotenv
+requests
+beautifulsoup4
+lxml
+phonenumbers
+extruct
+w3lib
+reportlab
+feedparser
+google-generativeai

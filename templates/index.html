@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Findelix — Company Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b1020;
+      --bg-soft:#0f172a;
+      --surface:#0b1220;
+      --text:#e5e7eb;
+      --muted:#aab3c5;
+      --line:#1f2937;
+      --grad:linear-gradient(135deg,#8b5cf6 0%,#06b6d4 100%);
+      --accent:#22d3ee;
+      --accent2:#a78bfa;
+      --danger:#ef4444;
+      --ok:#10b981;
+      --shadow:0 20px 60px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(167,139,250,.18), transparent 60%),
+        radial-gradient(1000px 500px at 100% 0%, rgba(34,211,238,.14), transparent 60%),
+        var(--bg);
+    }
+    header{
+      padding:28px 16px 36px;
+      background:var(--grad);
+      border-bottom:1px solid rgba(255,255,255,.1);
+      box-shadow:0 12px 40px rgba(139,92,246,.35);
+    }
+    .wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+    .brand{
+      display:flex;align-items:center;gap:14px
+    }
+    .logo{
+      width:40px;height:40px;border-radius:12px;
+      background:radial-gradient(circle at 30% 30%, #fff 0 5px, #22d3ee 6px, #8b5cf6 70%);
+      box-shadow:0 8px 24px rgba(0,0,0,.25), inset 0 0 30px rgba(255,255,255,.35);
+    }
+    h1{margin:0;font-size:28px;letter-spacing:.4px}
+    .sub{margin:6px 0 0;color:#e0f2fe}
+
+    main{max-width:1120px;margin:-30px auto 60px;padding:0 16px}
+    .grid{display:grid;grid-template-columns:1fr;gap:18px}
+    @media(min-width:940px){ .grid{grid-template-columns:1fr 1fr} }
+
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)) , var(--surface);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+    .card h3{margin:0 0 12px;font-size:18px;font-weight:700}
+    label{display:block;margin:.6rem 0 .35rem;color:#cbd5e1;font-weight:600}
+    input[type="text"], textarea{
+      width:100%;
+      padding:.8rem .9rem;
+      background:#0c1430;
+      color:var(--text);
+      border:1px solid #273246;
+      border-radius:12px;
+      outline:none;
+      transition:.2s border-color, .2s box-shadow;
+      box-shadow:inset 0 0 0 9999px rgba(255,255,255,.01);
+    }
+    input[type="text"]:focus, textarea:focus{
+      border-color:#3b82f6;
+      box-shadow:0 0 0 4px rgba(59,130,246,.15);
+    }
+    textarea{min-height:140px;resize:vertical}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > div{flex:1;min-width:240px}
+
+    /* 🔹 New width adjustments for Company & Domain fields */
+    #single .row > div:first-child {  /* Company */
+      flex: 3 1 0;
+      min-width: 280px;
+    }
+    #single .row > div:last-child {   /* Domain */
+      flex: 1 1 0;
+      min-width: 220px;
+    }
+    @media (max-width: 900px) {
+      #single .row { flex-wrap: wrap; }
+      #single .row > div { flex: 1 1 100%; }
+    }
+    /* 🔹 End new code */
+
+    .btn{
+      appearance:none;border:none;cursor:pointer;
+      padding:.8rem 1.1rem;border-radius:12px;
+      color:#0b1020;background:#fff;font-weight:700;
+      transition:transform .12s ease, box-shadow .2s ease, opacity .2s;
+      box-shadow:0 10px 30px rgba(255,255,255,.12);
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn:active{transform:translateY(0)}
+    .btn.primary{background-image:var(--grad);color:#fff;box-shadow:0 12px 40px rgba(6,182,212,.25)}
+    .btn.ghost{background:transparent;color:#e2e8f0;border:1px solid #2b3850}
+    .btn.small{padding:.6rem .8rem;font-weight:600}
+
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .muted{color:var(--muted)}
+
+    pre{
+      margin-top:12px;
+      background:#030816;
+      border:1px solid #1c2740;
+      border-radius:12px;
+      padding:14px;
+      color:#cfe7ff;
+      overflow:auto;
+      max-height:340px;
+      line-height:1.35;
+      font-size:13px;
+      white-space: pre-wrap;  
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      background:rgba(34,211,238,.12);
+      border:1px solid rgba(34,211,238,.35);
+      color:#9ae6ff;border-radius:999px;padding:.35rem .7rem;font-size:12px;font-weight:600
+    }
+    .split{display:grid;grid-template-columns:1fr;gap:18px}
+    @media(min-width:940px){ .split{grid-template-columns:1.1fr .9fr} }
+
+    .footer{opacity:.7;text-align:center;margin-top:26px;color:#b6c2d6;font-size:12px}
+    .hidden{display:none}
+    .spinner{
+      width:18px;height:18px;border:3px solid rgba(255,255,255,.25);
+      border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .tag{font-size:12px;color:#cbd5e1}
+    .toast{
+      position:fixed;right:16px;bottom:16px;background:#081025;border:1px solid #24304a;
+      color:#dbeafe;padding:12px 14px;border-radius:12px;box-shadow:var(--shadow);display:flex;gap:10px;align-items:center
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="wrap">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>Findelix</h1>
+          <div class="sub">Real-time company intelligence — cleaner, faster, clearer.</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="split">
+      <!-- Left: Single Lookup -->
+      <div class="card">
+        <div class="row" style="align-items:center;justify-content:space-between">
+          <h3>Single Lookup</h3>
+          <span class="pill">Live</span>
+        </div>
+
+        <form id="single">
+          <div class="row">
+            <div>
+              <label>Company</label>
+              <input type="text" name="company" placeholder="e.g. Spotify" />
+            </div>
+            <div>
+              <label>Domain</label>
+              <input type="text" name="domain" placeholder="e.g. spotify.com" />
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" id="lookupBtn">
+              <span class="spinner hidden" id="singleSpin"></span>
+              <span id="lookupText">Lookup</span>
+            </button>
+            <a class="btn ghost" id="exportCsv" href="#" download>Export CSV</a>
+            <a class="btn ghost" id="exportPdf" href="#" download>Export PDF</a>
+            <span class="tag muted">Exports use your latest lookup</span>
+          </div>
+        </form>
+
+        <pre id="out" class="muted">Results will appear here…</pre>
+      </div>
+
+      <!-- Right: Quick Tips / Status -->
+      <div class="card">
+        <h3>Tips</h3>
+        <ul class="muted" style="margin:0;padding-left:16px;line-height:1.6">
+          <li>Try both <b>Company</b> and <b>Domain</b> for best accuracy.</li>
+          <li>If you change API keys, <b>restart</b> the server so the env loads.</li>
+          <li>Use <b>Export CSV/PDF</b> after a successful lookup.</li>
+        </ul>
+        <div style="margin-top:16px">
+          <span class="pill">Status</span>
+          <div id="status" class="muted" style="margin-top:8px">Idle</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk -->
+    <div class="grid" style="margin-top:18px">
+      <div class="card">
+        <h3>Bulk Lookup</h3>
+        <form id="bulk" enctype="multipart/form-data">
+          <label>Paste list (one per line, optional comma: company,domain)</label>
+          <textarea name="list" placeholder="Acme Inc, acme.com&#10;Beta LLC, beta.io"></textarea>
+          <div class="row" style="align-items:center;justify-content:space-between;margin-top:8px">
+            <label class="muted">or Upload CSV <input type="file" name="file" accept=".csv"/></label>
+            <button class="btn primary" id="bulkBtn">
+              <span class="spinner hidden" id="bulkSpin"></span>
+              <span id="bulkText">Run Bulk</span>
+            </button>
+          </div>
+        </form>
+        <pre id="bulkout" class="muted">Bulk results will appear here…</pre>
+      </div>
+
+      <div class="card">
+        <h3>What gets returned?</h3>
+        <div class="muted" style="line-height:1.6">
+          <p>• <b>Executives</b>: CEO + leadership names & titles</p>
+          <p>• <b>Contacts</b>: emails, phones, HQ address</p>
+          <p>• <b>Socials</b>: LinkedIn, X/Twitter, YouTube, etc.</p>
+          <p>• <b>Summary & Posts</b>: brief recap and recent posts (when available)</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">© <span id="yr"></span> Findelix</div>
+  </main>
+
+  <div id="toast" class="toast hidden"><span>✔</span><span id="toastMsg">Done</span></div>
+
+  <script>
+    const $ = (sel)=>document.querySelector(sel);
+    const single = $('#single');
+    const out = $('#out');
+    const exportCsv = $('#exportCsv');
+    const exportPdf = $('#exportPdf');
+    const statusEl = $('#status');
+    const singleSpin = $('#singleSpin');
+    const lookupText = $('#lookupText');
+    const bulk = $('#bulk');
+    const bulkout = $('#bulkout');
+    const bulkSpin = $('#bulkSpin');
+    const bulkText = $('#bulkText');
+    const toast = $('#toast');
+    const toastMsg = $('#toastMsg');
+    $('#yr').textContent = new Date().getFullYear();
+
+    function showToast(msg){
+      toastMsg.textContent = msg;
+      toast.classList.remove('hidden');
+      setTimeout(()=>toast.classList.add('hidden'), 2000);
+    }
+    function setLoading(btnSpin, btnText, loading){
+      btnSpin.classList.toggle('hidden', !loading);
+      btnText.style.opacity = loading ? .65 : 1;
+    }
+    function pretty(obj){ return JSON.stringify(obj, null, 2); }
+    function setExportLinks(company, domain){
+      const params = new URLSearchParams();
+      if(company) params.set('company', company);
+      if(domain) params.set('domain', domain);
+      exportCsv.href = '/export?' + params.toString() + '&format=csv';
+      exportPdf.href = '/export?' + params.toString() + '&format=pdf';
+    }
+
+    single.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(single);
+      const company = (fd.get('company')||'').trim();
+      const domain  = (fd.get('domain')||'').trim();
+      if(!company && !domain){
+        out.textContent = 'Please enter at least a Company or a Domain.';
+        return;
+      }
+      setExportLinks(company, domain);
+      out.textContent = 'Working…';
+      statusEl.textContent = 'Fetching profile…';
+      setLoading(singleSpin, lookupText, true);
+
+      try{
+        const res = await fetch('/lookup', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ company, domain })
+        });
+        const data = await res.json();
+        out.textContent = pretty(data);
+        statusEl.textContent = 'Ready';
+        showToast('Lookup complete');
+      }catch(err){
+        out.textContent = 'Error fetching profile.';
+        statusEl.textContent = 'Error';
+      }finally{
+        setLoading(singleSpin, lookupText, false);
+      }
+    });
+
+    bulk.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const formData = new FormData(bulk);
+      bulkout.textContent = 'Working…';
+      setLoading(bulkSpin, bulkText, true);
+      try{
+        const res = await fetch('/bulk', { method:'POST', body: formData });
+        const data = await res.json();
+        bulkout.textContent = pretty(data);
+        showToast('Bulk complete');
+      }catch(err){
+        bulkout.textContent = 'Error running bulk.';
+      }finally{
+        setLoading(bulkSpin, bulkText, false);
+      }
+    });
+  </script>
+</body>
+</html>
