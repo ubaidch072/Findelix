@@ -1,4 +1,5 @@
 # providers/posts.py
+import os
 import re
 import requests, feedparser
 from urllib.parse import urljoin
@@ -11,21 +12,29 @@ MAX_POSTS = 3
 SUMMARY_MIN = 100
 SUMMARY_MAX = 150
 
-# --- ML Summarizer (preferred). If unavailable, we'll fall back to Gemini ---
+# --- ML Summarizer (preferred). If unavailable or disabled, fall back to Gemini ---
 _SUMMARIZER = None
+
 def _get_summarizer():
     """
-    Lazy-load the ML summarizer so the app still runs even if transformers/torch
-    aren't installed in some environments.
+    Lazy-load the ML summarizer.
+    On Render/production, enable by setting USE_LOCAL_SUMMARIZER=1.
+    This prevents heavy model downloads unless explicitly allowed.
     """
     global _SUMMARIZER
+
+    # Gate by env var (default OFF in prod)
+    if os.getenv("USE_LOCAL_SUMMARIZER", "0").lower() not in ("1", "true", "yes"):
+        return False
+
     if _SUMMARIZER is None:
         try:
-            from ml.summarizer import Summarizer
-            _SUMMARIZER = Summarizer()  # swap in fine-tuned ckpt via Summarizer(model_ckpt="...")
+            from ml.summarizer import Summarizer  # uses MODEL_CKPT if provided
+            _SUMMARIZER = Summarizer()
         except Exception:
             _SUMMARIZER = False  # signals "unavailable"
     return _SUMMARIZER
+
 
 def _enforce_word_window(text: str, wmin: int, wmax: int) -> str:
     if not text:
@@ -37,8 +46,11 @@ def _enforce_word_window(text: str, wmin: int, wmax: int) -> str:
             text += "."
     return text
 
+
 def _get(url: str):
-    return requests.get(url, headers=UA, timeout=12)
+    # Slightly conservative timeout for shared hosts
+    return requests.get(url, headers=UA, timeout=10)
+
 
 def _discover_site_feeds(website: str) -> List[Dict]:
     posts: List[Dict] = []
@@ -60,8 +72,10 @@ def _discover_site_feeds(website: str) -> List[Dict]:
                             })
                         break
         except Exception:
+            # swallow and continue to next path/rss
             pass
     return posts
+
 
 def get_recent_posts(company: str, domain: str, website: Optional[str]) -> List[Dict]:
     """
@@ -78,7 +92,8 @@ def get_recent_posts(company: str, domain: str, website: Optional[str]) -> List[
     q = company or domain or ""
     if q and not posts:
         try:
-            data = serper_news(q, num=8)
+            # smaller num keeps latency down on shared hosts
+            data = serper_news(q, num=6)
             for n in data.get("news", []):
                 posts.append({
                     "source": "news",
@@ -105,9 +120,10 @@ def get_recent_posts(company: str, domain: str, website: Optional[str]) -> List[
 
     return posts
 
+
 def build_summary_from_posts(posts: List[Dict], company: str, domain: str) -> str:
     """
-    Build a 100–150 word summary using the ML model; fall back to Gemini if needed.
+    Build a 100–150 word summary using the ML model when enabled; fall back to Gemini if needed.
     """
     # Collect material from kept posts (skip placeholder)
     material = []
@@ -122,7 +138,7 @@ def build_summary_from_posts(posts: List[Dict], company: str, domain: str) -> st
 
     long_text = "\n".join(material)
 
-    # Preferred: ML
+    # Preferred: ML (if explicitly enabled and successfully loaded)
     summary = ""
     summarizer = _get_summarizer()
     if summarizer:
@@ -152,6 +168,6 @@ def build_summary_from_posts(posts: List[Dict], company: str, domain: str) -> st
         except Exception:
             summary = ""
 
-    # Final enforcement
+    # Final enforcement (upper bound)
     summary = _enforce_word_window(summary, SUMMARY_MIN, SUMMARY_MAX)
     return summary
