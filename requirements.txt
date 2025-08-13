@@ -1,7 +1,8 @@
-flask
-gunicorn
+Flask
+Flask-Cors
 python-dotenv
 requests
+requests-cache
 beautifulsoup4
 lxml
 w3lib
@@ -11,9 +12,7 @@ extruct
 reportlab
 pandas
 openpyxl
+google-generativeai
+waitress
 transformers
 torch
-sentencepiece
-accelerate
-google-generativeai
-requests-cache

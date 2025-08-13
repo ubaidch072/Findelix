@@ -1,44 +1,38 @@
-# providers/posts.py
-import os
-import re
-import requests, feedparser
-from urllib.parse import urljoin
+import os, re, time
 from typing import List, Dict, Optional
+from urllib.parse import urljoin
+import requests, feedparser
 
-from .serper import serper_news, gemini_summarize  # Gemini kept as fallback
+from .serper import serper_news, serper_search, summarize_text, gemini_summarize
 
-UA = {"User-Agent": "Findelix/1.0 (+https://example.com/findelix)"}
+DEFAULT_TIMEOUT = int(os.getenv("HTTP_TIMEOUT_SECONDS", "15"))
+HTTP_RETRIES = int(os.getenv("HTTP_RETRIES", "1"))
+
+def _http_get_with_retry(url, **kwargs):
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = DEFAULT_TIMEOUT
+    last_err = None
+    for attempt in range(HTTP_RETRIES + 1):
+        try:
+            return requests.get(url, **kwargs)
+        except Exception as e:
+            last_err = e
+            time.sleep(0.5 * (attempt + 1))
+    raise last_err
+
+UA_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36 Findelix/1.0"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 MAX_POSTS = 3
 SUMMARY_MIN = 100
 SUMMARY_MAX = 150
 
-# --- ML Summarizer (preferred). If unavailable or disabled, fall back to Gemini ---
-_SUMMARIZER = None
-
-def _get_summarizer():
-    """
-    Lazy-load the ML summarizer.
-    On Render/production, enable by setting USE_LOCAL_SUMMARIZER=1.
-    This prevents heavy model downloads unless explicitly allowed.
-    """
-    global _SUMMARIZER
-
-    # Gate by env var (default OFF in prod)
-    if os.getenv("USE_LOCAL_SUMMARIZER", "0").lower() not in ("1", "true", "yes"):
-        return False
-
-    if _SUMMARIZER is None:
-        try:
-            from ml.summarizer import Summarizer  # uses MODEL_CKPT if provided
-            _SUMMARIZER = Summarizer()
-        except Exception:
-            _SUMMARIZER = False  # signals "unavailable"
-    return _SUMMARIZER
-
-
 def _enforce_word_window(text: str, wmin: int, wmax: int) -> str:
-    if not text:
-        return text
+    text = (text or "").strip()
+    if not text: return text
     words = text.split()
     if len(words) > wmax:
         text = " ".join(words[:wmax]).rstrip()
@@ -46,128 +40,138 @@ def _enforce_word_window(text: str, wmin: int, wmax: int) -> str:
             text += "."
     return text
 
+def _try_extract_rss_links(html: str, base_url: str) -> List[str]:
+    urls: List[str] = []
+    try:
+        for m in re.finditer(r'href="([^"]+\.xml)"', html, flags=re.I):
+            urls.append(urljoin(base_url, m.group(1)))
+        for m in re.finditer(r'href="([^"]+/(?:feed|rss|atom)/?)"', html, flags=re.I):
+            urls.append(urljoin(base_url, m.group(1)))
+    except Exception:
+        pass
+    seen=set(); out=[]
+    for u in urls:
+        if u not in seen:
+            seen.add(u); out.append(u)
+    return out[:5]
 
-def _get(url: str):
-    # Slightly conservative timeout for shared hosts
-    return requests.get(url, headers=UA, timeout=10)
+def _fetch_feed_items(url: str) -> List[Dict]:
+    try:
+        r = _http_get_with_retry(url, headers=UA_HEADERS, allow_redirects=True)
+        if r.status_code >= 400 or not r.content:
+            return []
+        fp = feedparser.parse(r.content)
+        items = []
+        for it in (fp.entries or [])[:6]:
+            title = (getattr(it, "title", "") or "").strip()
+            link  = (getattr(it, "link", "") or "").strip()
+            published = (getattr(it, "published", "") or getattr(it, "updated", "") or getattr(it, "created", "") or "").strip()
+            if title and link:
+                items.append({"title": title, "link": link, "published": published})
+        return items
+    except Exception:
+        return []
 
-
-def _discover_site_feeds(website: str) -> List[Dict]:
+def _pull_rss_or_news(company: Optional[str], domain: Optional[str], website: Optional[str]) -> List[Dict]:
     posts: List[Dict] = []
-    for path in ["/newsroom", "/news", "/press", "/blog", "/stories"]:
-        url = urljoin(website.rstrip("/"), path)
-        try:
-            r = _get(url)
-            if r.status_code < 400:
-                for rss in ["/feed", "/rss", "/atom.xml", "/index.xml"]:
-                    rr = _get(url.rstrip("/") + rss)
-                    if rr.status_code < 400 and "xml" in rr.headers.get("Content-Type", "").lower():
-                        feed = feedparser.parse(rr.text)
-                        for e in feed.entries[:6]:
-                            posts.append({
-                                "source": "blog",
-                                "title": e.get("title"),
-                                "url": e.get("link"),
-                                "published": str(e.get("published", "")),
-                            })
-                        break
-        except Exception:
-            # swallow and continue to next path/rss
-            pass
-    return posts
-
-
-def get_recent_posts(company: str, domain: str, website: Optional[str]) -> List[Dict]:
-    """
-    Return a list of recent posts, capped to MAX_POSTS.
-    If none found, return a single placeholder row: title = 'No Posts to Show'.
-    """
-    posts: List[Dict] = []
-
-    # 1) first-party feeds
     if website:
-        posts.extend(_discover_site_feeds(website))
-
-    # 2) SERPER news (fallback if nothing from the site)
-    q = company or domain or ""
-    if q and not posts:
         try:
-            # smaller num keeps latency down on shared hosts
-            data = serper_news(q, num=6)
-            for n in data.get("news", []):
-                posts.append({
-                    "source": "news",
-                    "title": n.get("title"),
-                    "url": n.get("link"),
-                    "published": n.get("date"),
-                })
+            r = _http_get_with_retry(website, headers=UA_HEADERS, allow_redirects=True)
+            if r.status_code < 400 and r.text:
+                for feed_url in _try_extract_rss_links(r.text, website):
+                    posts.extend(_fetch_feed_items(feed_url))
+                    if len(posts) >= MAX_POSTS:
+                        return posts[:MAX_POSTS]
         except Exception:
             pass
 
-    # Clean + cap
-    posts = [p for p in posts if isinstance(p.get("title"), str) and p.get("title")]
-    posts = posts[:MAX_POSTS]
+    q = (company or domain or "") or ""
+    if q:
+        def _news_pass(pass_gl: str):
+            try:
+                news = serper_news(q, num=8, gl=pass_gl)
+            except Exception:
+                return []
+            out=[]
+            for it in (news.get("news") or []) + (news.get("organic") or []):
+                title = (it.get("title") or "").strip()
+                link  = (it.get("link") or "").strip()
+                date  = (it.get("date") or it.get("published") or "").strip()
+                if title and link:
+                    out.append({"title": title, "link": link, "published": date})
+                    if len(out) >= MAX_POSTS:
+                        break
+            return out
 
-    # Placeholder if empty
-    if not posts:
-        posts = [{
-            "source": None,
-            "title": "No Posts to Show",
-            "url": None,
-            "published": None,
-            "placeholder": True
-        }]
+        def _web_pass(pass_gl: str):
+            try:
+                data = serper_search(f"{q} news", num=10, gl=pass_gl)
+            except Exception:
+                return []
+            out=[]
+            for it in (data.get("organic") or []):
+                title = (it.get("title") or "").strip()
+                link  = (it.get("link") or "").strip()
+                if title and link:
+                    out.append({"title": title, "link": link, "published": it.get('date') or ""})
+                    if len(out) >= MAX_POSTS:
+                        break
+            return out
 
-    return posts
+        gl_pref = "pk" if (domain or "").endswith(".pk") else os.getenv("SERPER_GL","us").lower()
+        posts.extend(_news_pass(gl_pref))
+        if not posts and gl_pref != "us":
+            posts.extend(_news_pass("us"))
+        if not posts:
+            posts.extend(_web_pass(gl_pref))
+            if not posts and gl_pref != "us":
+                posts.extend(_web_pass("us"))
 
+    return posts[:MAX_POSTS]
 
-def build_summary_from_posts(posts: List[Dict], company: str, domain: str) -> str:
-    """
-    Build a 100–150 word summary using the ML model when enabled; fall back to Gemini if needed.
-    """
-    # Collect material from kept posts (skip placeholder)
-    material = []
-    for p in posts:
-        if p.get("placeholder"):
-            continue
-        title = p.get("title") or ""
-        published = p.get("published") or ""
-        line = f"{title}. {published}".strip()
-        if line:
-            material.append(line)
+def _build_prompt(company: str, domain: str, website: Optional[str], posts: List[Dict]) -> str:
+    parts = []
+    if company: parts.append(f"Company: {company}")
+    if domain:  parts.append(f"Domain: {domain}")
+    if website: parts.append(f"Website: {website}")
+    if posts:
+        parts.append("Recent items:")
+        for p in posts[:MAX_POSTS]:
+            parts.append(f"- {p.get('title','').strip()} ({p.get('published','')}) — {p.get('link','')}")
+    return "\n".join(parts)
 
-    long_text = "\n".join(material)
-
-    # Preferred: ML (if explicitly enabled and successfully loaded)
+def build_summary_from_posts(company: str, domain: str, website: Optional[str], posts: List[Dict]) -> str:
+    prompt = _build_prompt(company, domain, website, posts)
     summary = ""
-    summarizer = _get_summarizer()
-    if summarizer:
-        try:
-            summary = summarizer.summarize_100_150_words(
-                long_text, target_min=SUMMARY_MIN, target_max=SUMMARY_MAX
-            )
-        except Exception:
-            summary = ""
-
-    # Fallback: Gemini with explicit word bounds
+    try:
+        if summarize_text:
+            summary = summarize_text(prompt, word_bounds=(SUMMARY_MIN, SUMMARY_MAX)) or ""
+    except Exception:
+        summary = ""
     if not summary:
-        if material:
-            bullets = "\n".join([f"- {m}" for m in material])
-            prompt = (
-                f"Summarize the following recent items about {company or domain}. "
-                f"Write {SUMMARY_MIN}-{SUMMARY_MAX} words, neutral tone, focus on official product/feature announcements, "
-                f"partnerships, or financial updates. Avoid unrelated celebrity news.\n\n{bullets}"
-            )
-        else:
-            prompt = (
-                f"In {SUMMARY_MIN}-{SUMMARY_MAX} words, provide a neutral overview of {company or domain}: "
-                f"what it does, products/services, market position, and very recent developments if any."
-            )
         try:
             summary = gemini_summarize(prompt) or ""
         except Exception:
             summary = ""
-
-    # Final enforcement (upper bound)
     summary = _enforce_word_window(summary, SUMMARY_MIN, SUMMARY_MAX)
+
+    if len(summary.split()) < SUMMARY_MIN:
+        try:
+            retry = gemini_summarize(prompt + "\n\nWrite a concise ~120-word executive summary (neutral tone).") or ""
+            if retry:
+                summary = _enforce_word_window(retry, SUMMARY_MIN, SUMMARY_MAX)
+        except Exception:
+            pass
     return summary
+
+def get_recent_posts(company: str, domain: str, website: Optional[str]) -> List[Dict]:
+    items = _pull_rss_or_news(company, domain, website)[:MAX_POSTS]
+    if items:
+        return items
+    return [{
+        "source": None,
+        "title": "No Posts to Show",
+        "url": None,
+        "published": None,
+        "placeholder": True
+    }]
