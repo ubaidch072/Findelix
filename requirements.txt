@@ -16,3 +16,4 @@ google-generativeai
 waitress
 transformers
 torch
+gunicorn
